@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Build 05 — Specialist agents</title>
+  <style>
+    body { margin: 0; background: #f6f3ec; color: #1c1917; font-family: "Segoe UI", sans-serif; }
+    main { width: 920px; padding: 28px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    .lead { margin: 0 0 16px; color: #57534e; }
+    .box { background: #fffdf8; border: 2px solid #1c1917; border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+    .python { background: #e7eef8; }
+    .model { background: #fff4d6; }
+    .stop { background: #fde2dc; }
+    .save { background: #e5f4ea; }
+    .kicker { display: block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #57534e; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 0; font-size: 15px; }
+    .down { text-align: center; font-size: 22px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Build 05 — Specialist agents</h1>
+    <p class="lead">Blue is Python. Yellow calls the model. Red is a failed section. Green is a section that remains.</p>
+
+    <div class="box">
+      <span class="kicker">From earlier builds</span>
+      <h2>1. Shared package</h2>
+      <p>Page text, headings, the outline from build 04, and the learner's level, goal, and minutes.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box python">
+      <span class="kicker">Python, not a model</span>
+      <h2>2. Coordinator</h2>
+      <p>Runs the study agent plus the four new agents. It runs them only when the page text exists. One failed agent leaves the other sections in place.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box model">
+      <span class="kicker">Already built</span>
+      <h2>3. Study agent</h2>
+      <p>Objectives, explanation, glossary, misconceptions, and a recap.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">New model agent</span>
+      <h2>4. Lesson agent</h2>
+      <p>Sections in source order, one worked example, and a check question. The answer stays hidden.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">New model agent</span>
+      <h2>5. Lab agent</h2>
+      <p>Tasks with an expected result. If the page has no procedure, it says so and offers a concept exercise.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">New model agent</span>
+      <h2>6. Project agent</h2>
+      <p>Goal, deliverable, milestones, and what “done” means.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">New model agent</span>
+      <h2>7. Runbook agent</h2>
+      <p>Numbered steps, a check for each step, and what to do if a step fails. If the page has no procedure, it says so.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box python">
+      <span class="kicker">Python</span>
+      <h2>8. Quote checker on every section</h2>
+      <p>The same checker from build 04 runs on all five results.</p>
+    </div>
+    <div class="box save">
+      <span class="kicker">Result</span>
+      <h2>9. Five sections</h2>
+      <p>A failed section is marked with its error. The sections that succeeded are still returned.</p>
+    </div>
+  </main>
+</body>
+</html>

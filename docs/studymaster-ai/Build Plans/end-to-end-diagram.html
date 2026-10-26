@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>StudyMaster AI — End-to-end diagram</title>
+  <style>
+    :root {
+      --ink: #1c1917;
+      --paper: #f6f3ec;
+      --card: #fffdf8;
+      --line: #1c1917;
+      --decision: #fff4d6;
+      --stop: #fde2dc;
+      --go: #e5f4ea;
+      --quiet: #57534e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 40px 20px 72px;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Segoe UI", sans-serif;
+      line-height: 1.4;
+    }
+    main { max-width: 880px; margin: 0 auto; }
+    h1 { font-size: 32px; margin: 0 0 8px; }
+    h2 { font-size: 22px; margin: 40px 0 16px; }
+    p.lead { margin: 0 0 28px; color: var(--quiet); max-width: 640px; }
+    .flow { display: flex; flex-direction: column; align-items: center; }
+    .box {
+      width: min(100%, 460px);
+      background: var(--card);
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      text-align: center;
+    }
+    .decision { background: var(--decision); }
+    .stop { background: var(--stop); width: min(100%, 320px); }
+    .go { background: var(--go); }
+    .kicker {
+      display: block;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--quiet);
+      margin-bottom: 4px;
+    }
+    .arrow { height: 28px; color: var(--ink); font-size: 22px; line-height: 28px; }
+    .split {
+      width: min(100%, 760px);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .split.three { grid-template-columns: 1fr 1fr 1fr; width: min(100%, 880px); }
+    .branch { display: flex; flex-direction: column; align-items: center; }
+    .branch h3 { margin: 0 0 8px; font-size: 14px; font-weight: 650; }
+    .folders {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .folders .box { width: auto; min-width: 120px; padding: 12px 14px; }
+    .join { font-size: 22px; }
+    @media (max-width: 700px) {
+      .split, .split.three { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>End-to-end diagram</h1>
+    <p class="lead">This is the full path of the StudyMaster AI agent, from the learner opening the page to a saved study session.</p>
+
+    <h2>Learner path</h2>
+    <div class="flow">
+      <div class="box">Learner opens the Streamlit page</div>
+      <div class="arrow">↓</div>
+      <div class="box">Enters level, goal, minutes, and one address</div>
+      <div class="arrow">↓</div>
+      <div class="box decision"><span class="kicker">Decision</span>Where did the address come from?</div>
+      <div class="arrow">↓</div>
+      <div class="split">
+        <div class="branch">
+          <h3>Catalog</h3>
+          <div class="box">Paired Microsoft Learn address</div>
+          <div class="arrow">↓</div>
+          <div class="box">LinkedIn address stays a reference and is not fetched</div>
+        </div>
+        <div class="branch">
+          <h3>Typed URL</h3>
+          <div class="box">Typed http or https address</div>
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="box">Submit</div>
+      <div class="arrow">↓</div>
+      <div class="box decision"><span class="kicker">Decision</span>Result already on screen?</div>
+      <div class="arrow">↓</div>
+      <div class="split">
+        <div class="branch">
+          <h3>Yes</h3>
+          <div class="box go">Show that result again</div>
+          <div class="arrow">↓</div>
+          <div class="box stop">Model is not called</div>
+        </div>
+        <div class="branch">
+          <h3>No</h3>
+          <div class="box">Check the address</div>
+          <div class="arrow">↓</div>
+          <div class="box">Check every redirect hop</div>
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="box decision"><span class="kicker">Decision</span>Private, local, or metadata target?</div>
+      <div class="arrow">↓</div>
+      <div class="split">
+        <div class="branch">
+          <h3>Yes</h3>
+          <div class="box stop">Stop and show the error</div>
+        </div>
+        <div class="branch">
+          <h3>No</h3>
+          <div class="box">Download with a timeout and a size limit</div>
+          <div class="arrow">↓</div>
+          <div class="box">Extract title, headings, and article text</div>
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="box decision"><span class="kicker">Decision</span>Text shorter than the minimum?</div>
+      <div class="arrow">↓</div>
+      <div class="split">
+        <div class="branch">
+          <h3>Yes</h3>
+          <div class="box stop">Show the error</div>
+          <div class="arrow">↓</div>
+          <div class="box stop">Model is not called</div>
+        </div>
+        <div class="branch">
+          <h3>No</h3>
+          <div class="box go">Save the readable text</div>
+          <div class="arrow">↓</div>
+          <div class="box">Coordinator asks for one shared outline</div>
+          <div class="arrow">↓</div>
+          <div class="box">Study, lesson, lab, project, and runbook agents</div>
+          <div class="arrow">↓</div>
+          <div class="box">Each agent receives the source, the outline, and the learner inputs</div>
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="box">Quote checker tests each section</div>
+      <div class="arrow">↓</div>
+      <div class="split">
+        <div class="branch">
+          <div class="box stop">The source does not cover this.</div>
+        </div>
+        <div class="branch">
+          <div class="box">One failed agent leaves the other sections in place</div>
+        </div>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="box go">SQLite stores the source and the artifacts</div>
+      <div class="arrow">↓</div>
+      <div class="box">Page renders the artifacts and hides lesson answers</div>
+      <div class="arrow">↓</div>
+      <div class="split three">
+        <div class="branch">
+          <h3>Quiz</h3>
+          <div class="box">Submitted answer goes to the grader</div>
+          <div class="arrow">↓</div>
+          <div class="box go">Attempt is saved</div>
+        </div>
+        <div class="branch">
+          <h3>Look again</h3>
+          <div class="box">History, answer toggles, and Markdown download</div>
+          <div class="arrow">↓</div>
+          <div class="box stop">Read SQLite and do not call the model</div>
+        </div>
+        <div class="branch">
+          <h3>Rewrite one part</h3>
+          <div class="box">Regenerate one section</div>
+          <div class="arrow">↓</div>
+          <div class="box decision">This is the only later model call</div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Folder path</h2>
+    <div class="folders">
+      <div class="box">ui</div>
+      <div class="join">→</div>
+      <div class="box">extraction</div>
+      <div class="join">→</div>
+      <div class="branch">
+        <div class="box">agents</div>
+        <div class="arrow">↓</div>
+        <div class="box">prompts</div>
+      </div>
+      <div class="join">→</div>
+      <div class="box">quote checker</div>
+      <div class="join">→</div>
+      <div class="box">storage</div>
+    </div>
+  </main>
+</body>
+</html>

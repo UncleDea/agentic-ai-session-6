@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Build 08 — History, rewrite, and download</title>
+  <style>
+    body { margin: 0; background: #f6f3ec; color: #1c1917; font-family: "Segoe UI", sans-serif; }
+    main { width: 920px; padding: 28px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    .lead { margin: 0 0 16px; color: #57534e; }
+    .box { background: #fffdf8; border: 2px solid #1c1917; border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+    .python { background: #e7eef8; }
+    .model { background: #fff4d6; }
+    .stop { background: #fde2dc; }
+    .save { background: #e5f4ea; }
+    .kicker { display: block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #57534e; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 0; font-size: 15px; }
+    .down { text-align: center; font-size: 22px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Build 08 — History, rewrite, and download</h1>
+    <p class="lead">Blue is Python. Yellow calls the model. Red means the page is not downloaded again. Green is read from the saved study.</p>
+
+    <div class="box save">
+      <span class="kicker">SQLite</span>
+      <h2>1. Saved studies</h2>
+      <p>The list shows saved packs, newest first. Opening one reads the database.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box stop">
+      <span class="kicker">No new download</span>
+      <h2>2. Open a saved pack</h2>
+      <p>The page shows the stored sections. It does not fetch the link and it does not call the model.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box model">
+      <span class="kicker">One section</span>
+      <h2>3. Rewrite one section</h2>
+      <p>The model rewrites only the chosen section from the saved page text. The other sections stay.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box save">
+      <span class="kicker">No model call</span>
+      <h2>4. Download Markdown</h2>
+      <p>One file contains the pack already on the page. Lesson answers stay out of the file.</p>
+    </div>
+  </main>
+</body>
+</html>

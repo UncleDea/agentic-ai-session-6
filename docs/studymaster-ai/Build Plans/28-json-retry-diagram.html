@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Build 28 — JSON retry</title>
+  <style>
+    body { margin: 0; background: #f6f3ec; color: #1c1917; font-family: "Segoe UI", sans-serif; }
+    main { width: 920px; padding: 28px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    .lead { margin: 0 0 16px; color: #57534e; }
+    .box { background: #fffdf8; border: 2px solid #1c1917; border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+    .model { background: #f8efd4; }
+    .stop { background: #f8e4e4; }
+    .goal { background: #e5f4ea; }
+    .kicker { display: block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #57534e; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 0; font-size: 15px; }
+    .down { text-align: center; font-size: 22px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Build 28 — JSON retry</h1>
+    <p class="lead">Yellow asks once more for JSON. Green keeps the section. Red stops only that section.</p>
+
+    <div class="box model">
+      <span class="kicker">First reply</span>
+      <h2>1. The reply is not JSON</h2>
+      <p>The same instructions are sent again, with a line that the reply must be JSON only.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box goal">
+      <span class="kicker">Second reply</span>
+      <h2>2. A readable reply is used</h2>
+      <p>The section is written from that JSON. The other sections were never stopped.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box stop">
+      <span class="kicker">Still not JSON</span>
+      <h2>3. Only that section is an error</h2>
+      <p>A second bad reply marks that one section. The rest of the pack stays.</p>
+    </div>
+  </main>
+</body>
+</html>

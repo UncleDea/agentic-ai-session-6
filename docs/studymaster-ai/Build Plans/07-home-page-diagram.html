@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Build 07 — Home page</title>
+  <style>
+    body { margin: 0; background: #f6f3ec; color: #1c1917; font-family: "Segoe UI", sans-serif; }
+    main { width: 920px; padding: 28px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    .lead { margin: 0 0 16px; color: #57534e; }
+    .box { background: #fffdf8; border: 2px solid #1c1917; border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+    .python { background: #e7eef8; }
+    .model { background: #fff4d6; }
+    .stop { background: #fde2dc; }
+    .save { background: #e5f4ea; }
+    .kicker { display: block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #57534e; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 0; font-size: 15px; }
+    .down { text-align: center; font-size: 22px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Build 07 — Home page</h1>
+    <p class="lead">Blue is Python. Yellow calls the model. Red stops the run. Green is saved and shown.</p>
+
+    <div class="box">
+      <span class="kicker">On your computer</span>
+      <h2>1. StudyMaster AI</h2>
+      <p>The learner pastes one public link and chooses a level, a goal, and how many minutes they have. The button says “Study this page”.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box python">
+      <span class="kicker">Python</span>
+      <h2>2. Read the page</h2>
+      <p>The safe reader from build 02 checks the link and extracts the article text.</p>
+    </div>
+    <div class="box stop">
+      <span class="kicker">Stop</span>
+      <h2>3. Bad or unreadable link</h2>
+      <p>The page shows the safe error and stops. The model is not called.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box save">
+      <span class="kicker">Already saved</span>
+      <h2>4. Same page, same request</h2>
+      <p>The same link, text, level, goal, and minutes return the saved pack. The model is not called again.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box model">
+      <span class="kicker">Model, one outline</span>
+      <h2>5. Coordinator</h2>
+      <p>Study, lesson, lab, project, and runbook run from the shared outline. One failed section stays marked. The others remain.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box save">
+      <span class="kicker">Shown and saved</span>
+      <h2>6. Five sections on the page</h2>
+      <p>The outline and the five sections appear under the title. Lesson answers stay in memory and stay off the page. SQLite keeps the pack.</p>
+    </div>
+  </main>
+</body>
+</html>

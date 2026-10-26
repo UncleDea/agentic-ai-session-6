@@ -1,0 +1,19 @@
+# StudyMaster AI dependencies.
+# Install them with: python -m pip install -r requirements.txt
+
+# Web interface. This is what draws the page in the browser.
+streamlit==1.66.1
+
+# Talks to OpenAI models. Not used until a later step.
+openai==3.37.0
+
+# Downloads a web page (requests) and reads its HTML (beautifulsoup4).
+# Not used until a later step.
+requests==2.34.2
+beautifulsoup4==4.15.0
+
+# Loads the local .env file into environment variables.
+python-dotenv==1.2.4
+
+# Runs automated tests. Not used until a later step.
+pytest==9.1.1

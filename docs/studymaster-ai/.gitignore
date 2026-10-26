@@ -1,0 +1,26 @@
+# Secrets. The real .env file stays on your computer.
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Python virtual environment and bytecode.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local databases created when storage is added later.
+*.db
+*.sqlite
+*.sqlite3
+
+# Editor and operating-system files.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

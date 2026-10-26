@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Build 04 — Study agent</title>
+  <style>
+    body { margin: 0; background: #f6f3ec; color: #1c1917; font-family: "Segoe UI", sans-serif; }
+    main { width: 920px; padding: 28px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    .lead { margin: 0 0 16px; color: #57534e; }
+    .box { background: #fffdf8; border: 2px solid #1c1917; border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+    .python { background: #e7eef8; }
+    .model { background: #fff4d6; }
+    .stop { background: #fde2dc; }
+    .save { background: #e5f4ea; }
+    .kicker { display: block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #57534e; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p, li { margin: 0; font-size: 15px; }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .down { text-align: center; font-size: 22px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Build 04 — Study agent</h1>
+    <p class="lead">Blue is Python. Yellow calls the model. Red stops the run. Green is a quote that was found in the page.</p>
+
+    <div class="box">
+      <span class="kicker">Already read</span>
+      <h2>1. Page text</h2>
+      <p>Title, URL, headings, and the article text from the page reader.</p>
+    </div>
+    <div class="box">
+      <span class="kicker">Learner</span>
+      <h2>2. Who the lesson is for</h2>
+      <p>Level, goal, and minutes.</p>
+    </div>
+    <div class="pair">
+      <div class="box stop">
+        <span class="kicker">Stop</span>
+        <h2>Empty source</h2>
+        <p>The model is not called.</p>
+      </div>
+      <div class="box stop">
+        <span class="kicker">Stop</span>
+        <h2>Missing API key</h2>
+        <p>Stop before any network call.</p>
+      </div>
+    </div>
+    <div class="down">↓</div>
+    <div class="box python">
+      <span class="kicker">Python</span>
+      <h2>3. Model client</h2>
+      <p>One shared call to OpenAI. The key and model come from .env. Timeout. Low temperature. The key is never logged.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box model">
+      <span class="kicker">Model agent, first</span>
+      <h2>4. Outline agent</h2>
+      <p>Writes one outline using only the page. The prompt says: use only this source.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box model">
+      <span class="kicker">Model agent</span>
+      <h2>5. Study agent</h2>
+      <p>Receives the outline, the page, and the learner inputs. It writes objectives, a plain explanation, a glossary, misconceptions, and a recap. Each important section includes a short quote.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box python">
+      <span class="kicker">Python</span>
+      <h2>6. Quote checker</h2>
+      <p>Confirms each quote appears in the extracted text. Extra spaces are ignored.</p>
+    </div>
+    <div class="pair">
+      <div class="box save">
+        <span class="kicker">Grounded</span>
+        <h2>Quote found</h2>
+        <p>The section stays.</p>
+      </div>
+      <div class="box stop">
+        <span class="kicker">Not grounded</span>
+        <h2>Quote missing</h2>
+        <p>The section is marked not grounded.</p>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

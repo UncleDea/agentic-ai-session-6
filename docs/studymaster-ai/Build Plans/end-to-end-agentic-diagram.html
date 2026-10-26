@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>StudyMaster AI — Agentic diagram</title>
+  <style>
+    :root {
+      --ink: #1c1917;
+      --paper: #f6f3ec;
+      --card: #fffdf8;
+      --python: #e7eef8;
+      --model: #fff4d6;
+      --stop: #fde2dc;
+      --save: #e5f4ea;
+      --quiet: #57534e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Segoe UI", sans-serif;
+    }
+    main { width: 920px; padding: 28px 28px 36px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    .lead { margin: 0 0 16px; color: var(--quiet); }
+    .box {
+      background: var(--card);
+      border: 2px solid var(--ink);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-top: 10px;
+    }
+    .python { background: var(--python); }
+    .model { background: var(--model); }
+    .stop { background: var(--stop); }
+    .save { background: var(--save); }
+    .kicker {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--quiet);
+      margin-bottom: 4px;
+    }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p, li { margin: 0; font-size: 15px; }
+    ul { margin: 6px 0 0; padding-left: 18px; }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .down { text-align: center; font-size: 22px; line-height: 1; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>End-to-end agentic diagram</h1>
+    <p class="lead">Blue boxes are ordinary Python. Yellow boxes call the model. Red boxes stop the run. Green boxes are saved results.</p>
+
+    <div class="box">
+      <span class="kicker">Learner</span>
+      <h2>1. Study request</h2>
+      <p>Level, goal, minutes, and one public http or https address. A catalog choice uses the Microsoft Learn address. The LinkedIn address is not fetched.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box python">
+      <span class="kicker">Python</span>
+      <h2>2. Page reader</h2>
+      <p>Checks the address and every redirect. Downloads with a timeout and a size limit. Returns the title, headings, and article text.</p>
+    </div>
+    <div class="pair">
+      <div class="box stop">
+        <span class="kicker">Stop</span>
+        <h2>No readable text</h2>
+        <p>Show the error. The model is not called.</p>
+      </div>
+      <div class="box save">
+        <span class="kicker">Continue</span>
+        <h2>Readable text</h2>
+        <p>Save the source, then call the coordinator.</p>
+      </div>
+    </div>
+    <div class="down">↓</div>
+    <div class="box python">
+      <span class="kicker">Python, not a model</span>
+      <h2>3. Coordinator</h2>
+      <p>Runs only after readable text exists. One failed specialist leaves the other sections in place.</p>
+    </div>
+    <div class="box">
+      <span class="kicker">Shared package for every agent</span>
+      <h2>4. What each agent receives</h2>
+      <ul>
+        <li>Title, URL, headings, and source text</li>
+        <li>The shared outline</li>
+        <li>Learner level, goal, and minutes</li>
+      </ul>
+    </div>
+    <div class="box model">
+      <span class="kicker">One model client</span>
+      <h2>5. OpenAI call</h2>
+      <p>Uses the key and model from .env. Low temperature. Timeout. Each prompt says: use only this source.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box model">
+      <span class="kicker">Model agent, first</span>
+      <h2>6. Outline agent</h2>
+      <p>Builds one outline from the page. The five specialists all use this same outline.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">Model agent</span>
+      <h2>7. Study agent</h2>
+      <p>Objectives, plain explanation, glossary, misconceptions, and a recap.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">Model agent</span>
+      <h2>8. Lesson agent</h2>
+      <p>Sections in source order, one worked example, and a check question with the answer hidden.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">Model agent</span>
+      <h2>9. Lab agent</h2>
+      <p>Tasks with an expected result, or a concept exercise when the page has no procedure.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">Model agent</span>
+      <h2>10. Project agent</h2>
+      <p>Goal, deliverable, milestones, and what “done” means.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">Model agent</span>
+      <h2>11. Runbook agent</h2>
+      <p>Numbered steps, a check for each step, and what to do if a step fails. It says so when the page has no procedure.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box python">
+      <span class="kicker">Python</span>
+      <h2>12. Quote checker</h2>
+      <p>Each important section includes a short quote. The quote stays when it is on the page, the main words appear on that page, and not or only matches the quote. Otherwise the pack says The source does not cover this.</p>
+    </div>
+    <div class="box save">
+      <span class="kicker">SQLite</span>
+      <h2>13. Saved study pack</h2>
+      <p>Source, five artifacts, and status. The page renders the pack and hides lesson answers.</p>
+    </div>
+    <div class="box model">
+      <span class="kicker">Model agent, after an answer</span>
+      <h2>14. Grader</h2>
+      <p>Scores the learner’s reply as correct, partial, or incorrect, and gives one hint. The attempt is saved. History and download do not call the model. Regenerating one section is the only later model call.</p>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Build 09 — Connect your OpenAI key</title>
+  <style>
+    body { margin: 0; background: #f6f3ec; color: #1c1917; font-family: "Segoe UI", sans-serif; }
+    main { width: 920px; padding: 28px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    .lead { margin: 0 0 16px; color: #57534e; }
+    .box { background: #fffdf8; border: 2px solid #1c1917; border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+    .python { background: #e7eef8; }
+    .model { background: #fff4d6; }
+    .stop { background: #fde2dc; }
+    .save { background: #e5f4ea; }
+    .kicker { display: block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #57534e; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 0; font-size: 15px; }
+    .down { text-align: center; font-size: 22px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Build 09 — Connect your OpenAI key</h1>
+    <p class="lead">Blue is on your computer. Yellow is a paid model call. Red stops before any charge. Green is free to open again.</p>
+
+    <div class="box python">
+      <span class="kicker">On your computer</span>
+      <h2>1. Key in .env</h2>
+      <p>You set a $5 monthly limit, create a key, and put it in .env. The key is not shown on the page and is not saved in git.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box stop">
+      <span class="kicker">No charge</span>
+      <h2>2. Missing key</h2>
+      <p>Study, Rewrite, and Check my answer stop with a message. OpenAI is not called.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box model">
+      <span class="kicker">gpt-4o-mini</span>
+      <h2>3. Paid buttons</h2>
+      <p>Study this page makes about six calls. Rewrite and Check my answer make one call each. One new lesson is about one cent.</p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box save">
+      <span class="kicker">Free to open again</span>
+      <h2>4. Saved pack</h2>
+      <p>Opening a saved study, downloading Markdown, and showing a stored answer read SQLite. They do not call OpenAI.</p>
+    </div>
+  </main>
+</body>
+</html>
