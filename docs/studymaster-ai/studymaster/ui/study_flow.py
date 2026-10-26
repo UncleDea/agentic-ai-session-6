@@ -5,9 +5,15 @@ for the same unchanged page reads the saved pack and does not call the model.
 """
 
 import logging
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from io import BytesIO
+from urllib.parse import urlparse
+
+from docx import Document
+from docx.document import Document as DocumentType
 
 from studymaster.agents.client import Completer, OpenAIModelClient
 from studymaster.agents.coordinator import (
@@ -17,6 +23,7 @@ from studymaster.agents.coordinator import (
     run_study_pack,
 )
 from studymaster.agents.errors import AgentError, EmptySourceError
+from studymaster.agents.grader import SCORE_LABELS
 from studymaster.agents.quotes import COVER
 from studymaster.agents.lab import write_lab
 from studymaster.agents.lesson import write_lesson
@@ -58,7 +65,12 @@ class StudyOutcome:
     checks: tuple[HiddenCheck, ...] = ()
     resource_id: int = 0
     content_hash: str = ""
+    source_url: str = ""
     from_saved: bool = False
+    level: str = ""
+    minutes: int = 0
+    goal: str = ""
+    saved_on: str = ""
 
 
 def display_blocks(outcome: StudyOutcome) -> list[tuple[str, str]]:
@@ -103,6 +115,7 @@ def study_page(
     remembered_hash: str = "",
     article_text: str = "",
     on_progress: Callable[[str], None] | None = None,
+    on_preview: Callable[[str], None] | None = None,
 ) -> StudyOutcome:
     """Read one page, or the pasted lesson, and return its study pack."""
     cleaned_url = url.strip()
@@ -186,7 +199,12 @@ def study_page(
             checks=stored,
             resource_id=saved.resource.id,
             content_hash=digest,
+            source_url=saved.resource.url,
             from_saved=True,
+            level=saved.resource.level,
+            minutes=saved.resource.minutes,
+            goal=saved.resource.goal,
+            saved_on=saved.resource.fetched_at,
         )
 
     request = StudyRequest(
@@ -204,6 +222,7 @@ def study_page(
             complete=complete,
             settings=settings,
             on_progress=on_progress,
+            on_preview=_section_preview(on_preview, shortened=article.shortened),
         )
     except AgentError as exc:
         store.save_resource(
@@ -268,6 +287,11 @@ def study_page(
         checks=checks,
         resource_id=resource.id,
         content_hash=digest,
+        source_url=source_url,
+        level=cleaned_level,
+        minutes=minutes,
+        goal=cleaned_goal,
+        saved_on=resource.fetched_at,
     )
     logger.info("%s", pack_score_line(outcome))
     return outcome
@@ -308,6 +332,32 @@ def _pasted_title(text: str) -> str:
     return first[:80]
 
 
+def _section_preview(
+    on_preview: Callable[[str], None] | None,
+    *,
+    shortened: bool,
+) -> Callable[[str, str], None] | None:
+    """Turn a finished outline or section into the text shown during the wait."""
+    if on_preview is None:
+        return None
+
+    def reveal(kind: str, text: str) -> None:
+        body = _live_outline(text, shortened=shortened) if kind == "outline" else text.strip()
+        if body:
+            on_preview(body)
+
+    return reveal
+
+
+def _live_outline(outline: str, *, shortened: bool) -> str:
+    """Show the outline as soon as it is written, including a shortened-page line."""
+    notice = f"{SHORTENED_NOTICE}\n\n" if shortened else ""
+    body = outline.strip()
+    if not body:
+        return notice.strip()
+    return f"{notice}## Outline\n\n{body}"
+
+
 def _with_outline(
     section: AgentSection,
     outline: str,
@@ -335,21 +385,132 @@ def saved_studies(store: StudyStore) -> list[Resource]:
     return [resource for resource in store.list_resources() if resource.status == STATUS_OK]
 
 
-def matching_studies(studies: list[Resource], query: str) -> list[Resource]:
-    """Keep studies whose title or goal contains the typed words.
+def matching_studies(
+    studies: list[Resource],
+    query: str,
+    pieces: dict[int, str] | None = None,
+    lengths: dict[int, str] | None = None,
+    sites: dict[int, str] | None = None,
+    days: dict[int, str] | None = None,
+    levels: dict[int, str] | None = None,
+    scores: dict[int, str] | None = None,
+    checks: dict[int, str] | None = None,
+    progress: dict[int, str] | None = None,
+    questions: dict[int, str] | None = None,
+    replies: dict[int, str] | None = None,
+    remaining: dict[int, str] | None = None,
+    empty: dict[int, str] | None = None,
+    runbooks: dict[int, str] | None = None,
+    projects: dict[int, str] | None = None,
+) -> list[Resource]:
+    """Keep studies whose title, goal, pieces, minutes, site, day, level, score, check, progress, question, reply, left-to-check, empty-lesson, no-procedure, or uncovered-project line contains the words.
 
     An empty box keeps the whole list. Capital letters and extra spaces are ignored.
+    A number must match a whole number, so 1 leaves Checked 0 of 12 off the search.
+    Typing correct leaves Last check: Incorrect off the search.
+    Typing purpose keeps the pack whose latest question says purpose.
+    Typing reply keeps the pack whose reply day says reply.
+    Typing left to check keeps a pack that says how many questions are still waiting.
+    Typing empty keeps a pack whose lesson came back empty.
+    Typing procedure keeps a pack that says this page has no procedure.
+    Typing covered keeps a pack whose project is not covered by the page.
     """
     needle = " ".join(query.casefold().split())
     if not needle:
         return list(studies)
+    piece_lines = pieces or {}
+    length_lines = lengths or {}
+    site_lines = sites or {}
+    day_lines = days or {}
+    level_lines = levels or {}
+    score_lines = scores or {}
+    check_lines = checks or {}
+    progress_lines = progress or {}
+    question_lines = questions or {}
+    reply_lines = replies or {}
+    remaining_lines = remaining or {}
+    empty_lines = empty or {}
+    runbook_lines = runbooks or {}
+    project_lines = projects or {}
     matched: list[Resource] = []
     for resource in studies:
         title = " ".join((resource.title or resource.url).casefold().split())
         goal = " ".join(resource.goal.casefold().split())
-        if needle in title or needle in goal:
+        piece_line = " ".join(piece_lines.get(resource.id, "").casefold().split())
+        length_line = length_lines.get(resource.id, "").casefold()
+        site_line = " ".join(site_lines.get(resource.id, "").casefold().split())
+        day_line = day_lines.get(resource.id, "").casefold()
+        level_line = " ".join(level_lines.get(resource.id, "").casefold().split())
+        score_line = score_lines.get(resource.id, "").casefold()
+        check_line = check_lines.get(resource.id, "").casefold()
+        progress_line = progress_lines.get(resource.id, "").casefold()
+        question_line = question_lines.get(resource.id, "").casefold()
+        reply_line = reply_lines.get(resource.id, "").casefold()
+        remaining_line = remaining_lines.get(resource.id, "").casefold()
+        empty_line = empty_lines.get(resource.id, "").casefold()
+        runbook_line = runbook_lines.get(resource.id, "").casefold()
+        project_line = project_lines.get(resource.id, "").casefold()
+        if (
+            needle in title
+            or needle in goal
+            or (piece_line and needle in piece_line)
+            or _numbered_line_match(length_line, needle)
+            or (site_line and needle in site_line)
+            or _numbered_line_match(day_line, needle)
+            or (level_line and needle in level_line)
+            or _score_line_match(score_line, needle)
+            or _check_line_match(check_line, needle)
+            or _score_line_match(progress_line, needle)
+            or _check_line_match(question_line, needle)
+            or _check_line_match(reply_line, needle)
+            or _score_line_match(remaining_line, needle)
+            or _check_line_match(empty_line, needle)
+            or _check_line_match(runbook_line, needle)
+            or _check_line_match(project_line, needle)
+        ):
             matched.append(resource)
     return matched
+
+
+def _check_line_match(line: str, needle: str) -> bool:
+    """Return whether the check line contains the words as whole words.
+
+    Typing partial matches Last check: Partial. Typing correct leaves
+    Last check: Incorrect off the search.
+    """
+    cleaned = line
+    for mark in ".:;!?":
+        cleaned = cleaned.replace(mark, " ")
+    cleaned = " ".join(cleaned.split())
+    if not cleaned or not needle:
+        return False
+    return f" {needle} " in f" {cleaned} "
+
+
+def _score_line_match(line: str, needle: str) -> bool:
+    """Return whether the score line contains the words.
+
+    Typing 5 matches Questions to check: 5. A colon or period does not glue that 5
+    to the word beside it. Typing 5 leaves 77 and 12 off the search.
+    """
+    cleaned = line
+    for mark in ".:;!?":
+        cleaned = cleaned.replace(mark, " ")
+    return _numbered_line_match(cleaned, needle)
+
+
+def _numbered_line_match(line: str, needle: str) -> bool:
+    """Return whether the line contains the words.
+
+    Typing 5 matches 5 minutes. It leaves 15 minutes and October 25 off the search.
+    A comma does not glue the day to the year.
+    """
+    cleaned = " ".join(line.replace(",", " ").split())
+    if not cleaned or needle not in cleaned:
+        return False
+    if any(character.isdigit() for character in needle):
+        return f" {needle} " in f" {cleaned} "
+    return True
 
 
 _MONTHS = (
@@ -368,6 +529,101 @@ _MONTHS = (
 )
 
 
+def read_from_line(url: str) -> str:
+    """Return the site name for a public page, such as Read from learn.microsoft.com.
+
+    A pasted lesson has no site, so the line stays blank.
+    """
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return ""
+    host = parsed.hostname.lower().rstrip(".")
+    return f"Read from {host}"
+
+
+def saved_minutes(minutes: int) -> str:
+    """Return the study length, such as 15 minutes. Zero stays blank."""
+    if minutes == 1:
+        return "1 minute"
+    if minutes > 1:
+        return f"{minutes} minutes"
+    return ""
+
+
+def saved_level(level: str) -> str:
+    """Return who the pack was written for, such as For a beginner.
+
+    A missing level stays blank.
+    """
+    cleaned = level.strip().lower()
+    if cleaned == "beginner":
+        return "For a beginner"
+    if cleaned == "intermediate":
+        return "For an intermediate learner"
+    if cleaned == "advanced":
+        return "For an advanced learner"
+    return ""
+
+
+def saved_check(score: str) -> str:
+    """Return the latest check, such as Last check: Partial.
+
+    A pack with no check stays blank.
+    """
+    label = SCORE_LABELS.get(score.strip().lower(), "")
+    if not label:
+        return ""
+    return f"Last check: {label}"
+
+
+def saved_question(question: str) -> str:
+    """Return the latest question, such as Last question: What does the service do?
+
+    A pack with no check stays blank. The hint and the reply stay off this line.
+    """
+    cleaned = " ".join(question.split())
+    if not cleaned:
+        return ""
+    return f"Last question: {cleaned}"
+
+
+def saved_progress(answered: int, total: int) -> str:
+    """Return how many questions have a reply, such as Checked 1 of 6.
+
+    A pack with no questions stays blank. A second reply to the same question
+    still counts as one question.
+    """
+    if total < 1:
+        return ""
+    count = min(max(answered, 0), total)
+    return f"Checked {count} of {total}."
+
+
+def left_to_check(answered: int, total: int) -> str:
+    """Return how many questions are still waiting, such as Left to check: 5.
+
+    A pack with no questions stays blank. A finished pack says Left to check: 0.
+    A second reply to the same question still counts as one question.
+    """
+    if total < 1:
+        return ""
+    count = min(max(answered, 0), total)
+    return f"Left to check: {total - count}."
+
+
+def saved_pieces(kinds: Iterable[str]) -> str:
+    """Return the saved sections, such as Study, lesson.
+
+    The names follow the pack order. A missing section stays off the line.
+    """
+    present = set(kinds)
+    names = [kind for kind in SECTION_KINDS if kind in present]
+    if not names:
+        return ""
+    line = ", ".join(names)
+    return line[0].upper() + line[1:]
+
+
 def saved_day(fetched_at: str) -> str:
     """Return the saved day on this computer, such as Saved October 25, 2026."""
     try:
@@ -378,6 +634,21 @@ def saved_day(fetched_at: str) -> str:
         parsed = parsed.replace(tzinfo=timezone.utc)
     local = parsed.astimezone()
     return f"Saved {_MONTHS[local.month - 1]} {local.day}, {local.year}"
+
+
+def reply_day(created_at: str) -> str:
+    """Return the day of the latest reply, such as Reply day: October 25, 2026.
+
+    A pack with no check stays blank. The hint and the reply stay off this line.
+    """
+    try:
+        parsed = datetime.fromisoformat(created_at)
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    local = parsed.astimezone()
+    return f"Reply day: {_MONTHS[local.month - 1]} {local.day}, {local.year}."
 
 
 def open_saved(store: StudyStore, resource_id: int) -> StudyOutcome:
@@ -414,7 +685,12 @@ def open_saved(store: StudyStore, resource_id: int) -> StudyOutcome:
         checks=stored,
         resource_id=resource.id,
         content_hash=resource.content_hash,
+        source_url=resource.url,
         from_saved=True,
+        level=resource.level,
+        minutes=resource.minutes,
+        goal=resource.goal,
+        saved_on=resource.fetched_at,
     )
 
 
@@ -426,11 +702,70 @@ def pack_markdown(outcome: StudyOutcome) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+_HEADING_LINE = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
+_NUMBERED_LINE = re.compile(r"^(\d+)\.\s+(.*\S)\s*$")
+_BULLET_LINE = re.compile(r"^[-*]\s+(.*\S)\s*$")
+
+
+def pack_docx(outcome: StudyOutcome) -> bytes:
+    """Return the pack as a Word file. Lesson answers are omitted."""
+    document = Document()
+    title = outcome.title.strip()
+    if title:
+        document.add_heading(title, level=1)
+    for _kind, text in display_blocks(outcome):
+        _add_markdown_block(document, text)
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def _add_markdown_block(document: DocumentType, text: str) -> None:
+    """Add one section. Blank lines separate paragraphs."""
+    for raw in text.splitlines():
+        if not raw.strip():
+            continue
+        heading = _HEADING_LINE.match(raw.strip())
+        if heading:
+            level = min(len(heading.group(1)), 4)
+            document.add_heading(heading.group(2).replace("**", ""), level=level)
+            continue
+        if raw[:1].isdigit():
+            numbered = _NUMBERED_LINE.match(raw.strip())
+            if numbered:
+                paragraph = document.add_paragraph(style="List Number")
+                _write_runs(paragraph, numbered.group(2))
+                continue
+        if raw.lstrip()[:1] in "-*":
+            bullet = _BULLET_LINE.match(raw.strip())
+            if bullet:
+                paragraph = document.add_paragraph(style="List Bullet")
+                _write_runs(paragraph, bullet.group(1))
+                continue
+        paragraph = document.add_paragraph()
+        _write_runs(paragraph, raw.strip())
+
+
+def _write_runs(paragraph: object, text: str) -> None:
+    """Write **bold** words as bold text. The rest stays plain."""
+    for index, part in enumerate(text.split("**")):
+        if not part:
+            continue
+        run = paragraph.add_run(part)
+        if index % 2 == 1:
+            run.bold = True
+
+
 def markdown_filename(title: str) -> str:
     """Return a safe file name for a downloaded pack."""
     cleaned = "".join(character if character.isalnum() else "-" for character in title.lower())
     cleaned = "-".join(part for part in cleaned.split("-") if part)
     return f"{cleaned or 'study'}.md"
+
+
+def word_filename(title: str) -> str:
+    """Return a safe Word file name for a downloaded pack."""
+    return f"{markdown_filename(title).removesuffix('.md')}.docx"
 
 
 def regenerate_section(

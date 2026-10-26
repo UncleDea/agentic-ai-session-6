@@ -19,6 +19,7 @@ from studymaster.extraction.errors import (
     UnsupportedContentError,
 )
 from studymaster.extraction.fetch import read_page
+from studymaster.extraction.search import find_public_page
 from studymaster.extraction.url_safety import assert_safe_url
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -373,3 +374,49 @@ def test_logs_record_the_host_and_not_the_query(caplog: pytest.LogCaptureFixture
     assert "example.com" in caplog.text
     assert "super-secret-token" not in caplog.text
     assert "Page read failed" not in caplog.text
+
+
+LEARN_RESULT = (
+    "https://duckduckgo.com/l/?uddg="
+    "https%3A%2F%2Flearn.microsoft.com%2Fen-us%2Fpurview%2Fdlp-learn-about-dlp"
+    "&rut=1"
+)
+HTTP_RESULT = "https://duckduckgo.com/l/?uddg=http%3A%2F%2Fexample.com%2Fold"
+LOCAL_RESULT = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Flocalhost%2Fsecret"
+SECOND_SAFE = (
+    "https://duckduckgo.com/l/?uddg="
+    "https%3A%2F%2Flearn.microsoft.com%2Fen-us%2Ftraining%2Fmodules%2Fintro"
+)
+
+
+def _search_html(*hrefs: str) -> str:
+    links = "".join(f'<a class="result__a" href="{href}">Result</a>' for href in hrefs)
+    return f"<html><body>{links}</body></html>"
+
+
+def test_find_public_page_returns_the_first_safe_https_address() -> None:
+    def fetch(_url: str) -> str:
+        return _search_html(HTTP_RESULT, LEARN_RESULT)
+
+    found = find_public_page("data loss prevention", fetch=fetch, resolve=public_resolve)
+    assert found == "https://learn.microsoft.com/en-us/purview/dlp-learn-about-dlp"
+
+
+def test_find_public_page_skips_an_unsafe_address() -> None:
+    def fetch(_url: str) -> str:
+        return _search_html(LOCAL_RESULT, SECOND_SAFE)
+
+    def resolve(host: str) -> list[str]:
+        if host == "localhost":
+            return ["127.0.0.1"]
+        return [PUBLIC_IP]
+
+    found = find_public_page("weaving", fetch=fetch, resolve=resolve)
+    assert found == "https://learn.microsoft.com/en-us/training/modules/intro"
+
+
+def test_find_public_page_returns_nothing_when_the_search_fails() -> None:
+    def fetch(_url: str) -> str:
+        raise requests.ConnectionError("down")
+
+    assert find_public_page("weaving", fetch=fetch, resolve=public_resolve) is None

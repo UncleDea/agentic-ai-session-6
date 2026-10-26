@@ -9,6 +9,7 @@ from collections import Counter
 from studymaster.sample_links import (
     SAMPLE_LINKS,
     article_links,
+    find_articles,
     reading_goals,
 )
 
@@ -105,3 +106,17 @@ def test_data_protection_articles_use_learn_pages_only():
     ]
     assert all(item.linkedin_url == "" for item in items)
     assert all(item.goal for item in items)
+
+
+def test_find_articles_matches_title_words_and_skips_reading_goals():
+    one = find_articles("  Learn about data loss prevention ")
+    assert [item.title for item in one] == ["Learn about data loss prevention"]
+    assert one[0].learn_url == "https://learn.microsoft.com/en-us/purview/dlp-learn-about-dlp"
+    several = find_articles("data loss prevention")
+    assert [item.title for item in several] == [
+        "Learn about data loss prevention",
+        "Create and deploy a data loss prevention policy",
+    ]
+    assert find_articles("underwater basket weaving") == ()
+    assert find_articles("   ") == ()
+    assert all(item.role == "article" for item in find_articles("entra"))

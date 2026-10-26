@@ -8,7 +8,12 @@ import json
 import pytest
 
 from studymaster.agents.client import OpenAIModelClient
-from studymaster.agents.coordinator import SECTION_KINDS, run_study_pack
+from studymaster.agents.coordinator import (
+    SECTION_KINDS,
+    pack_size_line,
+    run_study_pack,
+    sections_for_minutes,
+)
 from studymaster.agents.errors import EmptySourceError, MissingApiKeyError
 from studymaster.agents.lab import NO_PROCEDURE, write_lab
 from studymaster.agents.lesson import write_lesson
@@ -233,6 +238,32 @@ def test_coordinator_returns_five_sections_from_one_outline():
     assert len(agent_prompts) == 5
     assert all(OUTLINE in prompt for prompt in agent_prompts)
     assert sum("Write a short outline" in prompt for prompt in model.prompts) == 1
+
+
+def test_up_to_ten_minutes_keeps_the_outline_study_and_lesson():
+    from dataclasses import replace
+
+    model = RoutingModel(_replies())
+    pack = run_study_pack(replace(request(), minutes=5), complete=model.complete)
+    assert [section.kind for section in pack.sections] == ["study", "lesson"]
+    assert pack.outline == OUTLINE
+    assert sections_for_minutes(10) == ("study", "lesson")
+    agent_prompts = [
+        prompt
+        for prompt in model.prompts
+        if "Write a short outline" not in prompt and "Repair these sentences" not in prompt
+    ]
+    assert len(agent_prompts) == 2
+
+
+def test_more_than_ten_minutes_keeps_the_full_pack():
+    from dataclasses import replace
+
+    model = RoutingModel(_replies())
+    pack = run_study_pack(replace(request(), minutes=15), complete=model.complete)
+    assert [section.kind for section in pack.sections] == list(SECTION_KINDS)
+    assert sections_for_minutes(11) == SECTION_KINDS
+    assert "lab, project, and runbook" in pack_size_line()
 
 
 def test_one_failed_agent_keeps_the_other_sections():

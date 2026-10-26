@@ -422,9 +422,30 @@ SAMPLE_LINKS: tuple[SampleLink, ...] = (
 )
 
 
+NO_PAGE_MATCH = "The list does not have that topic yet."
+
+
 def article_links() -> tuple[SampleLink, ...]:
     """Return the posts that pair with a Microsoft Learn page."""
     return tuple(item for item in SAMPLE_LINKS if item.role == "article")
+
+
+def find_articles(query: str) -> tuple[SampleLink, ...]:
+    """Return starter articles whose title or goal contains the typed words.
+
+    An empty box matches nothing. Reading goals are left out because they have
+    no page to open. Capital letters and extra spaces are ignored.
+    """
+    needle = " ".join(query.casefold().split())
+    if not needle:
+        return ()
+    matched: list[SampleLink] = []
+    for item in article_links():
+        title = " ".join(item.title.casefold().split())
+        goal = " ".join(item.goal.casefold().split())
+        if needle in title or needle in goal:
+            matched.append(item)
+    return tuple(matched)
 
 
 def reading_goals() -> tuple[SampleLink, ...]:

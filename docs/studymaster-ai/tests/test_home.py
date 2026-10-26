@@ -15,7 +15,10 @@ from studymaster.agents.quotes import COVER
 from studymaster.config import Settings
 from studymaster.extraction.errors import UnreadablePageError
 from studymaster.extraction.fetch import Article
+from studymaster.extraction.search import NO_PUBLIC_PAGE, USE_PAGE_HINT
+from studymaster.sample_links import NO_PAGE_MATCH
 from studymaster.storage.database import STATUS_ERROR, STATUS_OK, StudyStore
+from studymaster.ui.home import EMPTY_LESSON_HINT, EMPTY_LESSON_MARKDOWN
 from studymaster.ui.study_flow import (
     PASTED_TEXT_URL,
     SHORTENED_NOTICE,
@@ -23,7 +26,9 @@ from studymaster.ui.study_flow import (
     _outline_text,
     display_blocks,
     open_saved,
+    pack_markdown,
     pack_score_line,
+    saved_day,
     study_page,
 )
 from tests.test_specialists import HIDDEN_ANSWER, OUTLINE, SOURCE, RoutingModel, _replies
@@ -236,7 +241,7 @@ def test_catalog_choice_fills_the_learn_url_without_calling_the_model(
 ):
     from streamlit.testing.v1 import AppTest
 
-    from studymaster.sample_links import (
+    from studymaster.ui.home import (
         NO_READING_GOAL,
         READING_GOAL_CAPTION,
         article_links,
@@ -513,3 +518,408 @@ def test_the_pack_score_is_written_to_the_log(tmp_path: Path, caplog: pytest.Log
         )
     assert "Left out " in caplog.text
     assert "Questions to check:" in caplog.text
+
+
+FIRST_QUESTION = "What do plants use?"
+SECOND_QUESTION = "Where do plants grow?"
+LESSON_TEXT = "## Lesson\nLeaves use sunlight."
+STUDY_TEXT = "## Objectives\nSunlight makes food."
+FIRST_ANSWER = "Hidden leaf answer"
+SECOND_ANSWER = "Hidden root answer"
+
+
+def _screen_text(app: object) -> str:
+    parts: list[str] = []
+    for node in app.main:
+        value = getattr(node, "value", None)
+        if isinstance(value, str) and value:
+            parts.append(value)
+        label = getattr(node, "label", None)
+        if isinstance(label, str) and label:
+            parts.append(label)
+    return "\n".join(parts)
+
+
+def _open_pack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: StudyOutcome):
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "order.db"))
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"))
+    app.session_state["study_outcome"] = outcome
+    app.run()
+    return app
+
+
+def test_the_first_question_leads_and_the_lesson_follows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    outcome = StudyOutcome(
+        ok=True,
+        message="",
+        title="Photosynthesis",
+        sections=(
+            AgentSection("study", STATUS_OK, "", STUDY_TEXT, []),
+            AgentSection("lesson", STATUS_OK, "", LESSON_TEXT, []),
+        ),
+        checks=(
+            HiddenCheck(FIRST_QUESTION, FIRST_ANSWER, "sunlight"),
+            HiddenCheck(SECOND_QUESTION, SECOND_ANSWER, "soil"),
+        ),
+        resource_id=1,
+    )
+    downloaded = pack_markdown(outcome)
+    assert downloaded.index(STUDY_TEXT) < downloaded.index(LESSON_TEXT)
+
+    text = _screen_text(_open_pack(tmp_path, monkeypatch, outcome))
+    first = text.index(FIRST_QUESTION)
+    lesson = text.index(LESSON_TEXT)
+    second = text.index(SECOND_QUESTION)
+    study = text.index(STUDY_TEXT)
+    first_box = text.index("Your answer")
+    second_box = text.index("Your answer", first_box + 1)
+    assert first < first_box < lesson < second < second_box < study
+    assert FIRST_ANSWER not in text
+    assert SECOND_ANSWER not in text
+
+
+def test_a_pack_with_no_questions_keeps_the_section_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    outcome = StudyOutcome(
+        ok=True,
+        message="",
+        title="Photosynthesis",
+        sections=(
+            AgentSection("study", STATUS_OK, "", STUDY_TEXT, []),
+            AgentSection("lesson", STATUS_OK, "", LESSON_TEXT, []),
+        ),
+        resource_id=1,
+    )
+    text = _screen_text(_open_pack(tmp_path, monkeypatch, outcome))
+    assert text.index(STUDY_TEXT) < text.index(LESSON_TEXT)
+    assert "Your answer" not in text
+
+
+def test_a_pasted_lesson_names_the_level(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    outcome = StudyOutcome(
+        ok=True,
+        message="",
+        title="Pasted lesson",
+        sections=(AgentSection("lesson", STATUS_OK, "", LESSON_TEXT, []),),
+        resource_id=1,
+        source_url="pasted-text",
+        level="beginner",
+    )
+    text = _screen_text(_open_pack(tmp_path, monkeypatch, outcome))
+    assert "For a beginner" in text
+    assert "Read from" not in text
+    assert "For a beginner" not in pack_markdown(outcome)
+
+
+def test_a_pasted_lesson_does_not_name_a_site(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    outcome = StudyOutcome(
+        ok=True,
+        message="",
+        title="Pasted lesson",
+        sections=(AgentSection("lesson", STATUS_OK, "", LESSON_TEXT, []),),
+        resource_id=1,
+        source_url="pasted-text",
+    )
+    text = _screen_text(_open_pack(tmp_path, monkeypatch, outcome))
+    assert "Read from" not in text
+    assert "Read from" not in pack_markdown(outcome)
+
+
+def test_sections_appear_as_they_are_written(tmp_path: Path):
+    shown: list[str] = []
+    model = RoutingModel(_replies())
+    store = StudyStore(tmp_path / "live.db")
+    page_settings = settings(tmp_path / "live.db")
+
+    def read(url: str, settings=None) -> Article:
+        return _article(url)
+
+    fresh = study_page(
+        url="https://example.com/plants",
+        level="beginner",
+        goal="Explain photosynthesis",
+        minutes=20,
+        settings=page_settings,
+        store=store,
+        read=read,
+        complete=model.complete,
+        on_preview=shown.append,
+    )
+    assert fresh.source_url == "https://example.com/plants"
+    assert fresh.level == "beginner"
+    assert fresh.minutes == 20
+    assert fresh.goal == "Explain photosynthesis"
+    assert saved_day(fresh.saved_on).startswith("Saved ")
+    assert [text.splitlines()[0] for text in shown] == [
+        "## Outline",
+        "## Objectives",
+        "## Lesson",
+        "## Lab",
+        "## Project",
+        "## Runbook",
+    ]
+    assert OUTLINE in shown[0]
+    assert HIDDEN_ANSWER not in "\n".join(shown)
+
+    shown.clear()
+    saved = study_page(
+        url="https://example.com/plants",
+        level="beginner",
+        goal="Explain photosynthesis",
+        minutes=20,
+        settings=page_settings,
+        store=store,
+        read=read,
+        complete=model.complete,
+        on_preview=shown.append,
+    )
+    assert saved.from_saved is True
+    assert saved.source_url == "https://example.com/plants"
+    assert saved.level == "beginner"
+    assert saved.minutes == 20
+    assert saved.goal == "Explain photosynthesis"
+    assert saved.saved_on == fresh.saved_on
+    assert shown == []
+
+
+def test_a_shortened_page_shows_the_notice_with_the_outline(tmp_path: Path):
+    shown: list[str] = []
+    model = RoutingModel(_replies())
+
+    def read(url: str, settings=None) -> Article:
+        return Article(
+            url=url,
+            title="Photosynthesis",
+            headings=["How plants make food"],
+            text=SOURCE,
+            shortened=True,
+        )
+
+    study_page(
+        url="https://example.com/long",
+        level="beginner",
+        goal="Explain photosynthesis",
+        minutes=20,
+        settings=settings(tmp_path / "short.db"),
+        store=StudyStore(tmp_path / "short.db"),
+        read=read,
+        complete=model.complete,
+        on_preview=shown.append,
+    )
+    assert shown[0].startswith(SHORTENED_NOTICE)
+    assert "## Outline" in shown[0]
+
+
+def test_the_waiting_page_shows_a_finished_section(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def fake_study_page(**kwargs: object) -> StudyOutcome:
+        reveal = kwargs["on_preview"]
+        assert callable(reveal)
+        reveal("LIVE OUTLINE")
+        return StudyOutcome(
+            ok=True,
+            message="",
+            title="Photosynthesis",
+            sections=(AgentSection("study", STATUS_OK, "", STUDY_TEXT, []),),
+            resource_id=1,
+        )
+
+    monkeypatch.setattr("studymaster.ui.home.study_page", fake_study_page)
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "wait.db"))
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"))
+    app.run()
+    next(box for box in app.text_input if box.label == "Page link").set_value(
+        "https://example.com/plants"
+    )
+    next(box for box in app.text_input if box.label == "Goal").set_value(
+        "Explain photosynthesis"
+    )
+    next(button for button in app.button if button.label == "Study this page").click()
+    app.run()
+    text = _screen_text(app)
+    assert text.index("LIVE OUTLINE") < text.index(STUDY_TEXT)
+
+
+def test_an_empty_lesson_points_at_rewrite_lesson(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    outcome = StudyOutcome(
+        ok=True,
+        message="",
+        title="Photosynthesis",
+        sections=(
+            AgentSection("study", STATUS_OK, "", STUDY_TEXT, []),
+            AgentSection("lesson", STATUS_OK, "", EMPTY_LESSON_MARKDOWN, []),
+        ),
+        resource_id=1,
+    )
+    text = _screen_text(_open_pack(tmp_path, monkeypatch, outcome))
+    assert "Questions to check: 0." in text
+    assert text.index("Questions to check: 0.") < text.index(EMPTY_LESSON_HINT)
+    assert "Rewrite lesson" in text
+    assert EMPTY_LESSON_HINT not in pack_markdown(outcome)
+
+
+def test_a_written_lesson_with_no_questions_does_not_say_it_came_back_empty(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    outcome = StudyOutcome(
+        ok=True,
+        message="",
+        title="Photosynthesis",
+        sections=(
+            AgentSection("study", STATUS_OK, "", STUDY_TEXT, []),
+            AgentSection("lesson", STATUS_OK, "", LESSON_TEXT, []),
+        ),
+        resource_id=1,
+    )
+    text = _screen_text(_open_pack(tmp_path, monkeypatch, outcome))
+    assert EMPTY_LESSON_HINT not in text
+
+
+DLP_LEARN_URL = "https://learn.microsoft.com/en-us/purview/dlp-learn-about-dlp"
+DLP_GOAL = "Explain how data loss prevention protects sensitive information."
+
+
+def _finder_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "finder.db"))
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+
+    def fail_study(**_kwargs: object) -> None:
+        raise AssertionError("the model was called")
+
+    def fail_search(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("the web was searched")
+
+    monkeypatch.setattr("studymaster.ui.home.study_page", fail_study)
+    monkeypatch.setattr("studymaster.ui.home.find_public_page", fail_search)
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"))
+    app.run()
+    return app
+
+
+def _labeled_input(app: object, label: str):
+    return next(box for box in app.text_input if box.label == label)
+
+
+def test_find_a_page_fills_one_learn_address(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    app = _finder_app(tmp_path, monkeypatch)
+    _labeled_input(app, "What do you want to learn?").set_value(
+        "Learn about data loss prevention"
+    )
+    next(button for button in app.button if button.label == "Find a page").click()
+    app.run()
+    assert _labeled_input(app, "Page link").value == DLP_LEARN_URL
+    assert _labeled_input(app, "Goal").value == DLP_GOAL
+    assert "linkedin.com" not in _labeled_input(app, "Page link").value
+
+
+def test_find_a_page_asks_you_to_pick_when_several_match(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    app = _finder_app(tmp_path, monkeypatch)
+    _labeled_input(app, "What do you want to learn?").set_value("data loss prevention")
+    next(button for button in app.button if button.label == "Find a page").click()
+    app.run()
+    assert _labeled_input(app, "Page link").value == ""
+    assert "Several pages match. Pick one." in _screen_text(app)
+    next(
+        button
+        for button in app.button
+        if button.label == "Data protection: Learn about data loss prevention"
+    ).click()
+    app.run()
+    assert "Several pages match. Pick one." not in _screen_text(app)
+    assert _labeled_input(app, "Page link").value == DLP_LEARN_URL
+    assert _labeled_input(app, "Goal").value == DLP_GOAL
+
+
+def test_find_a_page_says_when_the_list_has_no_topic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    app = _finder_app(tmp_path, monkeypatch)
+    monkeypatch.setattr("studymaster.ui.home.find_public_page", lambda *_args, **_kwargs: None)
+    _labeled_input(app, "What do you want to learn?").set_value("underwater basket weaving")
+    next(button for button in app.button if button.label == "Find a page").click()
+    app.run()
+    assert NO_PAGE_MATCH in _screen_text(app)
+    assert NO_PUBLIC_PAGE in _screen_text(app)
+    assert _labeled_input(app, "Page link").value == ""
+    assert not any(button.label == "Use this page" for button in app.button)
+
+
+PUBLIC_PAGE = "https://learn.microsoft.com/en-us/training/modules/describe-cloud-service-types"
+
+
+def test_find_a_page_offers_one_public_address_when_the_list_misses(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    app = _finder_app(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "studymaster.ui.home.find_public_page",
+        lambda *_args, **_kwargs: PUBLIC_PAGE,
+    )
+    _labeled_input(app, "What do you want to learn?").set_value("underwater basket weaving")
+    next(button for button in app.button if button.label == "Find a page").click()
+    app.run()
+    shown = _screen_text(app)
+    assert NO_PAGE_MATCH in shown
+    assert USE_PAGE_HINT in shown
+    assert PUBLIC_PAGE in shown
+    assert _labeled_input(app, "Page link").value == ""
+    assert _labeled_input(app, "Goal").value == ""
+    next(button for button in app.button if button.label == "Use this page").click()
+    app.run()
+    assert _labeled_input(app, "Page link").value == PUBLIC_PAGE
+    assert _labeled_input(app, "Goal").value == ""
+    assert USE_PAGE_HINT not in _screen_text(app)
+
+
+def test_the_minutes_box_explains_the_pack_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from streamlit.testing.v1 import AppTest
+
+    from studymaster.agents.coordinator import pack_size_line
+
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "size.db"))
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+
+    def fail_study(*_args, **_kwargs):
+        raise AssertionError("a new study was started")
+
+    monkeypatch.setattr("studymaster.ui.home.study_page", fail_study)
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"))
+    app.run()
+    assert pack_size_line() in _screen_text(app)
+    assert next(box for box in app.number_input if box.label == "Minutes").value == 20
