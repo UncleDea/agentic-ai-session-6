@@ -105,12 +105,11 @@ def _section_blocks(section: AgentSection) -> list[tuple[str, str]]:
     heading = section.markdown.find("## Outline")
     if not outline or not picture or heading < 0:
         return [(section.kind, section.markdown)]
-    start = section.markdown.find(outline, heading)
-    if start < 0:
-        return [(section.kind, section.markdown)]
-    end = start + len(outline)
-    head = section.markdown[:end].rstrip()
-    tail = section.markdown[end:].lstrip("\n")
+    line_end = section.markdown.find("\n", heading)
+    if line_end < 0:
+        line_end = len(section.markdown)
+    head = section.markdown[:line_end].rstrip()
+    tail = section.markdown[line_end:].lstrip("\n")
     blocks = [("study", head), ("picture", picture)]
     if tail.strip():
         blocks.append(("study", tail))

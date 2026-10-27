@@ -110,8 +110,8 @@ def test_a_saved_pack_shows_the_picture_from_its_outline(tmp_path: Path) -> None
     blocks = display_blocks(opened)
     texts = [text for _kind, text in blocks]
     picture_at = next(index for index, (kind, _text) in enumerate(blocks) if kind == "picture")
-    assert "How plants make food" in texts[picture_at - 1]
+    assert texts[picture_at - 1].endswith("## Outline")
     assert "### Picture" in texts[picture_at]
-    assert texts[picture_at + 1].startswith("## Objectives")
+    assert "How plants make food" in texts[picture_at + 1]
     assert "roots" not in texts[picture_at]
     assert len(model.prompts) == used
