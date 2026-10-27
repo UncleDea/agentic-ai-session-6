@@ -36,6 +36,7 @@ from studymaster.ui.study_flow import (
     markdown_filename,
     matching_studies,
     open_saved,
+    outline_picture_html,
     pack_docx,
     pack_markdown,
     regenerate_section,
@@ -834,8 +835,19 @@ def _render_blocks(blocks: list[tuple[str, str]]) -> None:
     for kind, text in blocks:
         if kind == "error":
             st.error(text)
+        elif kind == "picture":
+            _render_picture(text)
         else:
             st.markdown(text)
+
+
+def _render_picture(picture: str) -> None:
+    """Draw the outline as stacked boxes. The words are the outline lines."""
+    drawing = outline_picture_html(picture)
+    if not drawing:
+        return
+    st.markdown("### Picture")
+    st.html(drawing)
 
 
 def _show_checks(

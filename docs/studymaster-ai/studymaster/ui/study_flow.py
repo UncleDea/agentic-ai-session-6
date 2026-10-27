@@ -5,6 +5,7 @@ for the same unchanged page reads the saved pack and does not call the model.
 """
 
 import logging
+import html
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
@@ -84,12 +85,75 @@ def display_blocks(outcome: StudyOutcome) -> list[tuple[str, str]]:
     blocks: list[tuple[str, str]] = []
     if outcome.outline:
         blocks.append(("outline", outcome.outline))
+        picture = outline_picture_markdown(outcome.outline)
+        if picture:
+            blocks.append(("picture", picture))
     for section in outcome.sections:
         if section.status != STATUS_OK:
             blocks.append(("error", section.error_message))
         elif section.markdown:
             blocks.append((section.kind, section.markdown))
     return blocks
+
+
+_STEP_MARKER = re.compile(r"^(?:\d+[.)]|[-*])\s+")
+
+
+def outline_steps(outline: str) -> list[str]:
+    """Return the outline lines that can be drawn. Each line comes from the outline."""
+    steps: list[str] = []
+    for raw in outline.splitlines():
+        line = _STEP_MARKER.sub("", raw.strip()).replace("**", "").replace("`", "").strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.casefold() in {step.casefold() for step in steps}:
+            continue
+        if len(line) > 160:
+            period = line.find(". ")
+            line = line[: period + 1] if 0 < period <= 160 else line[:160].rstrip()
+        if line not in outline and line not in outline.replace("**", "").replace("`", ""):
+            continue
+        steps.append(line)
+        if len(steps) == 6:
+            break
+    return steps
+
+
+def outline_picture_markdown(outline: str) -> str:
+    """Return a top-to-bottom picture of the outline, or an empty string."""
+    steps = outline_steps(outline)
+    if not steps:
+        return ""
+    lines = ["### Picture", ""]
+    for index, step in enumerate(steps):
+        lines.append(step)
+        if index < len(steps) - 1:
+            lines.append("↓")
+    return "\n".join(lines)
+
+
+def outline_picture_html(picture: str) -> str:
+    """Return the boxes for a picture. The words are the picture lines."""
+    steps = [
+        line.strip()
+        for line in picture.splitlines()
+        if line.strip() and line.strip() not in {"### Picture", "↓"}
+    ]
+    if not steps:
+        return ""
+    boxes: list[str] = []
+    for index, step in enumerate(steps):
+        boxes.append(
+            '<div style="border:1px solid #1f4d3a;border-radius:8px;'
+            "padding:10px 14px;background:#f7fbf8;color:#14221f;"
+            f'">{html.escape(step)}</div>'
+        )
+        if index < len(steps) - 1:
+            boxes.append(
+                '<div style="text-align:center;color:#1f4d3a;font-size:20px;'
+                'line-height:1.2;">↓</div>'
+            )
+    return "".join(boxes)
 
 
 def pack_score_line(outcome: StudyOutcome) -> str:
@@ -361,7 +425,11 @@ def _live_outline(outline: str, *, shortened: bool) -> str:
     body = outline.strip()
     if not body:
         return notice.strip()
-    return f"{notice}## Outline\n\n{body}"
+    picture = outline_picture_markdown(body)
+    shown = f"{notice}## Outline\n\n{body}"
+    if picture:
+        shown = f"{shown}\n\n{picture}"
+    return shown
 
 
 def _with_outline(
