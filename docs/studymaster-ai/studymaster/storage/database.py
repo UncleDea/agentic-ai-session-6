@@ -5,6 +5,8 @@ write data/studymaster.db.
 """
 
 import hashlib
+import hmac
+import secrets
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,6 +16,7 @@ ARTIFACT_KINDS = ("study", "lesson", "lab", "project", "runbook")
 ATTEMPT_SCORES = ("correct", "partial", "incorrect")
 STATUS_OK = "ok"
 STATUS_ERROR = "error"
+LOCAL_LEARNER_ID = "local"
 
 
 class StorageError(Exception):
@@ -35,6 +38,7 @@ class Resource:
     level: str
     goal: str
     minutes: int
+    owner_id: str = LOCAL_LEARNER_ID
 
 
 @dataclass(frozen=True)
@@ -109,7 +113,8 @@ class StudyStore:
                     extracted_text TEXT NOT NULL,
                     level TEXT NOT NULL,
                     goal TEXT NOT NULL,
-                    minutes INTEGER NOT NULL
+                    minutes INTEGER NOT NULL,
+                    owner_id TEXT NOT NULL DEFAULT 'local'
                 );
 
                 CREATE TABLE IF NOT EXISTS artifacts (
@@ -146,8 +151,28 @@ class StudyStore:
                     UNIQUE (resource_id, position),
                     FOREIGN KEY (resource_id) REFERENCES resources(id)
                 );
+
+                CREATE TABLE IF NOT EXISTS learners (
+                    owner_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    salt TEXT NOT NULL,
+                    password_hash TEXT NOT NULL
+                );
                 """
             )
+            self._ensure_owner_column(connection)
+
+    def _ensure_owner_column(self, connection: sqlite3.Connection) -> None:
+        """Add the learner id to a database created before this trial."""
+        columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(resources)")
+        }
+        if "owner_id" in columns:
+            return
+        connection.execute(
+            "ALTER TABLE resources ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'local'"
+        )
 
     def save_resource(
         self,
@@ -160,6 +185,7 @@ class StudyStore:
         level: str = "",
         goal: str = "",
         minutes: int = 0,
+        owner_id: str = LOCAL_LEARNER_ID,
     ) -> Resource:
         """Insert one fetched page and return the saved row."""
         _require_status(status)
@@ -172,8 +198,9 @@ class StudyStore:
                 """
                 INSERT INTO resources (
                     url, content_hash, fetched_at, title, status,
-                    error_message, extracted_text, level, goal, minutes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    error_message, extracted_text, level, goal, minutes,
+                    owner_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     url,
@@ -186,10 +213,52 @@ class StudyStore:
                     level,
                     goal,
                     minutes,
+                    owner_id,
                 ),
             )
             resource_id = int(cursor.lastrowid)
         return self.get_resource(resource_id)
+
+    def create_learner(
+        self,
+        *,
+        name: str,
+        password: str,
+        owner_id: str = LOCAL_LEARNER_ID,
+    ) -> None:
+        """Store one learner. The password is saved as a hash."""
+        cleaned = name.strip()
+        if not cleaned or not password:
+            raise StorageError("Enter a name and a password.")
+        salt = secrets.token_hex(16)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO learners (owner_id, name, salt, password_hash)
+                VALUES (?, ?, ?, ?)
+                """,
+                (owner_id, cleaned, salt, _password_hash(password, salt)),
+            )
+
+    def has_learner(self) -> bool:
+        """Return whether any login has been saved."""
+        with self._connect() as connection:
+            row = connection.execute("SELECT 1 FROM learners LIMIT 1").fetchone()
+        return row is not None
+
+    def authenticate(self, *, name: str, password: str) -> str | None:
+        """Return the learner id when the name and password match."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT owner_id, salt, password_hash FROM learners WHERE name = ?",
+                (name.strip(),),
+            ).fetchone()
+        if row is None:
+            return None
+        digest = _password_hash(password, str(row["salt"]))
+        if not hmac.compare_digest(digest, str(row["password_hash"])):
+            return None
+        return str(row["owner_id"])
 
     def get_resource(self, resource_id: int) -> Resource:
         """Return one page by its id."""
@@ -202,9 +271,16 @@ class StudyStore:
             raise StorageError(f"No saved page has id {resource_id}.")
         return _resource_from_row(row)
 
-    def delete_resource(self, resource_id: int) -> None:
+    def delete_resource(
+        self,
+        resource_id: int,
+        *,
+        owner_id: str = LOCAL_LEARNER_ID,
+    ) -> None:
         """Remove one saved page and its sections, checks, and attempts."""
-        self.get_resource(resource_id)
+        resource = self.get_resource(resource_id)
+        if resource.owner_id != owner_id:
+            raise StorageError("This study belongs to another learner.")
         with self._connect() as connection:
             connection.execute(
                 "DELETE FROM quiz_attempts WHERE resource_id = ?",
@@ -223,12 +299,22 @@ class StudyStore:
                 (resource_id,),
             )
 
-    def list_resources(self) -> list[Resource]:
-        """Return saved pages, newest first."""
+    def list_resources(self, *, owner_id: str | None = None) -> list[Resource]:
+        """Return saved pages, newest first. An owner keeps the other learners off the list."""
         with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT * FROM resources ORDER BY fetched_at DESC, id DESC"
-            ).fetchall()
+            if owner_id is None:
+                rows = connection.execute(
+                    "SELECT * FROM resources ORDER BY fetched_at DESC, id DESC"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM resources
+                    WHERE owner_id = ?
+                    ORDER BY fetched_at DESC, id DESC
+                    """,
+                    (owner_id,),
+                ).fetchall()
         return [_resource_from_row(row) for row in rows]
 
     def find_success(
@@ -239,6 +325,7 @@ class StudyStore:
         level: str,
         goal: str,
         minutes: int,
+        owner_id: str = LOCAL_LEARNER_ID,
     ) -> SavedStudy | None:
         """Return the newest successful save of this same page and learner request."""
         digest = content_hash(extracted_text)
@@ -252,10 +339,11 @@ class StudyStore:
                   AND goal = ?
                   AND minutes = ?
                   AND status = ?
+                  AND owner_id = ?
                 ORDER BY fetched_at DESC, id DESC
                 LIMIT 1
                 """,
-                (url, digest, level, goal, minutes, STATUS_OK),
+                (url, digest, level, goal, minutes, STATUS_OK, owner_id),
             ).fetchone()
         if row is None:
             return None
@@ -410,6 +498,17 @@ class StudyStore:
         return connection
 
 
+def _password_hash(password: str, salt: str) -> str:
+    """Return the stored hash for one password. The plain password is not kept."""
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(salt),
+        120_000,
+    )
+    return digest.hex()
+
+
 def _require_status(status: str) -> None:
     if status not in {STATUS_OK, STATUS_ERROR}:
         raise StorageError(f"Unknown status: {status}.")
@@ -432,6 +531,7 @@ def _resource_from_row(row: sqlite3.Row) -> Resource:
         level=row["level"],
         goal=row["goal"],
         minutes=row["minutes"],
+        owner_id=row["owner_id"],
     )
 
 

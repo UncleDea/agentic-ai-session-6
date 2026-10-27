@@ -27,11 +27,12 @@ from studymaster.sample_links import (
     goal_by_label,
     reading_goals,
 )
-from studymaster.storage.database import StudyStore
+from studymaster.storage.database import LOCAL_LEARNER_ID, StorageError, StudyStore
 from studymaster.ui.study_flow import (
     PASTED_TEXT_URL,
     StudyOutcome,
     display_blocks,
+    focus_waiting_question,
     markdown_filename,
     matching_studies,
     open_saved,
@@ -52,6 +53,7 @@ from studymaster.ui.study_flow import (
     saved_studies,
     read_from_line,
     study_page,
+    waiting_questions,
 )
 
 REWRITE_LABELS = {
@@ -85,6 +87,54 @@ LEVEL_LABELS = {
 logger = logging.getLogger(__name__)
 
 
+def _signed_in(store: StudyStore, *, require_login: bool) -> bool:
+    """Ask for the local login before the packs are shown.
+
+    A database with no login yet keeps the local page open so the first
+    login can be created. The public page hides every pack until a login
+    matches. A wrong name or password also leaves the packs hidden.
+    """
+    signed_in = st.session_state.get("learner_id")
+    if isinstance(signed_in, str) and signed_in:
+        return True
+    if not store.has_learner():
+        _create_login(store)
+        return not require_login
+    st.subheader("Sign in")
+    with st.form("sign-in"):
+        name = st.text_input("Name")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Sign in")
+    if submitted:
+        owner_id = store.authenticate(name=name, password=password)
+        if owner_id is None:
+            st.error("That name or password is not right.")
+        else:
+            st.session_state["learner_id"] = owner_id
+            st.rerun()
+    return False
+
+
+def _create_login(store: StudyStore) -> None:
+    """Save the first local login. The password is stored as a hash."""
+    with st.form("create-login"):
+        st.caption("Create a login for this computer. After it is saved, the packs stay hidden until the name and password match.")
+        name = st.text_input("Name", key="create_name")
+        password = st.text_input("Password", type="password", key="create_password")
+        submitted = st.form_submit_button("Create a login")
+    if not submitted:
+        return
+    try:
+        store.create_learner(name=name, password=password)
+    except StorageError as exc:
+        st.error(str(exc))
+        return
+    owner_id = store.authenticate(name=name, password=password)
+    if owner_id is not None:
+        st.session_state["learner_id"] = owner_id
+        st.rerun()
+
+
 def main() -> None:
     """Draw the home page."""
     configure_logging()
@@ -99,6 +149,10 @@ def main() -> None:
     _reset_screen()
     _apply_opened_pack()
     st.title("StudyMaster AI")
+    store = StudyStore(settings.database_path)
+    if not _signed_in(store, require_login=settings.require_login):
+        return
+    owner_id = str(st.session_state.get("learner_id") or LOCAL_LEARNER_ID)
     st.markdown(
         "Paste one public page. The study pack uses only the words on that page."
     )
@@ -178,6 +232,7 @@ def main() -> None:
                 remembered_hash=remembered_hash,
                 on_progress=report,
                 on_preview=reveal,
+                owner_id=owner_id,
             )
             if outcome.ok:
                 status.update(label="Study pack ready.", state="complete")
@@ -188,7 +243,8 @@ def main() -> None:
     outcome = st.session_state.get("study_outcome")
     if isinstance(outcome, StudyOutcome):
         _show(outcome, settings)
-    _show_history(StudyStore(settings.database_path))
+    _show_waiting(StudyStore(settings.database_path), owner_id=owner_id)
+    _show_history(StudyStore(settings.database_path), owner_id=owner_id)
 
 
 def _reset_screen() -> None:
@@ -487,9 +543,29 @@ def _show(outcome: StudyOutcome, settings: Settings) -> None:
         _show_rewrites(outcome, settings)
 
 
-def _show_history(store: StudyStore) -> None:
+def _show_waiting(store: StudyStore, *, owner_id: str) -> None:
+    """List questions that still need a correct reply.
+
+    Opening one reads the saved pack. It does not fetch a page or call the model.
+    """
+    rows = waiting_questions(store, owner_id=owner_id)
+    if not rows:
+        return
+    st.subheader("Questions still waiting")
+    for index, row in enumerate(rows):
+        if st.button(row.question, key=f"waiting-{row.resource_id}-{index}"):
+            outcome = open_saved(store, row.resource_id, owner_id=owner_id)
+            outcome = focus_waiting_question(outcome, row.question)
+            st.session_state["study_outcome"] = outcome
+            resource = store.get_resource(row.resource_id)
+            if resource.owner_id == owner_id:
+                _queue_opened_pack(outcome, resource.extracted_text)
+            st.rerun()
+
+
+def _show_history(store: StudyStore, *, owner_id: str = LOCAL_LEARNER_ID) -> None:
     """List saved packs. Opening one reads the database only."""
-    studies = saved_studies(store)
+    studies = saved_studies(store, owner_id=owner_id)
     if not studies:
         return
     st.subheader("Saved studies")
@@ -590,7 +666,7 @@ def _show_history(store: StudyStore) -> None:
         open_col, delete_col = st.columns(2)
         with open_col:
             if st.button("Open study", key=f"open-{resource.id}"):
-                outcome = open_saved(store, resource.id)
+                outcome = open_saved(store, resource.id, owner_id=owner_id)
                 st.session_state["study_outcome"] = outcome
                 _queue_opened_pack(outcome, resource.extracted_text)
                 st.rerun()
@@ -601,7 +677,7 @@ def _show_history(store: StudyStore) -> None:
                 if not waiting:
                     st.session_state[confirm_key] = True
                     st.rerun()
-                store.delete_resource(resource.id)
+                store.delete_resource(resource.id, owner_id=owner_id)
                 st.session_state.pop(confirm_key, None)
                 outcome = st.session_state.get("study_outcome")
                 if isinstance(outcome, StudyOutcome) and outcome.resource_id == resource.id:

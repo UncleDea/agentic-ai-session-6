@@ -31,6 +31,7 @@ class Settings:
     database_path: Path
     openai_timeout_seconds: float
     openai_temperature: float
+    require_login: bool = False
 
 
 def get_settings() -> Settings:
@@ -38,8 +39,8 @@ def get_settings() -> Settings:
 
     An empty OPENAI_API_KEY becomes None. The key value is never logged.
     """
-    raw_key = os.getenv("OPENAI_API_KEY", "").strip()
-    model = os.getenv("OPENAI_MODEL", "").strip() or "gpt-4o-mini"
+    raw_key = _setting("OPENAI_API_KEY")
+    model = _setting("OPENAI_MODEL") or "gpt-4o-mini"
     return Settings(
         openai_api_key=raw_key or None,
         openai_model=model,
@@ -50,12 +51,35 @@ def get_settings() -> Settings:
         database_path=_database_path(),
         openai_timeout_seconds=float(_positive_int("OPENAI_TIMEOUT_SECONDS", 60)),
         openai_temperature=_non_negative_float("OPENAI_TEMPERATURE", 0.2),
+        require_login=_require_login(),
     )
+
+
+def _setting(name: str) -> str:
+    """Read one setting from the environment, then from the host secret store.
+
+    The value is never logged. A missing secret file leaves the setting blank.
+    """
+    raw = os.getenv(name, "").strip()
+    if raw:
+        return raw
+    try:
+        import streamlit as st
+
+        value = st.secrets[name]
+    except Exception:
+        return ""
+    return str(value).strip()
+
+
+def _require_login() -> bool:
+    """Return whether the page must hide packs until a login matches."""
+    return _setting("REQUIRE_LOGIN").casefold() in {"1", "true", "yes"}
 
 
 def _database_path() -> Path:
     """Return the SQLite file path from the environment, or the project default."""
-    raw = os.getenv("DATABASE_PATH", "").strip()
+    raw = _setting("DATABASE_PATH")
     if not raw:
         return _DEFAULT_DATABASE
     return Path(raw)
@@ -63,7 +87,7 @@ def _database_path() -> Path:
 
 def _positive_int(name: str, default: int) -> int:
     """Read a positive integer setting, or keep the default."""
-    raw = os.getenv(name, "").strip()
+    raw = _setting(name)
     if not raw:
         return default
     try:
@@ -77,7 +101,7 @@ def _positive_int(name: str, default: int) -> int:
 
 def _non_negative_float(name: str, default: float) -> float:
     """Read a zero-or-higher decimal setting, or keep the default."""
-    raw = os.getenv(name, "").strip()
+    raw = _setting(name)
     if not raw:
         return default
     try:

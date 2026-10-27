@@ -7,7 +7,7 @@ for the same unchanged page reads the saved pack and does not call the model.
 import logging
 import re
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from io import BytesIO
 from urllib.parse import urlparse
@@ -36,6 +36,7 @@ from studymaster.config import Settings, get_settings
 from studymaster.extraction.errors import ReaderError
 from studymaster.extraction.fetch import Article, read_page
 from studymaster.storage.database import (
+    LOCAL_LEARNER_ID,
     STATUS_ERROR,
     STATUS_OK,
     Resource,
@@ -116,6 +117,7 @@ def study_page(
     article_text: str = "",
     on_progress: Callable[[str], None] | None = None,
     on_preview: Callable[[str], None] | None = None,
+    owner_id: str = LOCAL_LEARNER_ID,
 ) -> StudyOutcome:
     """Read one page, or the pasted lesson, and return its study pack."""
     cleaned_url = url.strip()
@@ -156,6 +158,7 @@ def study_page(
                 level=cleaned_level,
                 goal=cleaned_goal,
                 minutes=minutes,
+                owner_id=owner_id,
             )
             return StudyOutcome(ok=False, message=str(exc))
         source_url = cleaned_url
@@ -167,6 +170,7 @@ def study_page(
         level=cleaned_level,
         goal=cleaned_goal,
         minutes=minutes,
+        owner_id=owner_id,
     )
     if saved is not None:
         _report(on_progress, "Opening the saved pack.")
@@ -234,6 +238,7 @@ def study_page(
             level=cleaned_level,
             goal=cleaned_goal,
             minutes=minutes,
+            owner_id=owner_id,
         )
         return StudyOutcome(
             ok=False,
@@ -250,6 +255,7 @@ def study_page(
         level=cleaned_level,
         goal=cleaned_goal,
         minutes=minutes,
+        owner_id=owner_id,
     )
     shown = tuple(
         _with_outline(section, pack.outline, shortened=article.shortened)
@@ -380,9 +386,65 @@ def _with_outline(
     )
 
 
-def saved_studies(store: StudyStore) -> list[Resource]:
-    """Return successful saved packs, newest first."""
-    return [resource for resource in store.list_resources() if resource.status == STATUS_OK]
+@dataclass(frozen=True)
+class WaitingQuestion:
+    """One lesson question that does not yet have a correct score."""
+
+    resource_id: int
+    title: str
+    question: str
+
+
+def waiting_questions(
+    store: StudyStore,
+    *,
+    owner_id: str = LOCAL_LEARNER_ID,
+) -> list[WaitingQuestion]:
+    """Return questions that still need a correct reply for one learner.
+
+    A correct score takes the question off the list. This reads the saved
+    checks and attempts only. It does not fetch a page or call the model.
+    """
+    waiting: list[WaitingQuestion] = []
+    for resource in saved_studies(store, owner_id=owner_id):
+        correct = {
+            item.question
+            for item in store.list_attempts(resource.id)
+            if item.score == "correct"
+        }
+        for check in store.list_lesson_checks(resource.id):
+            if check.question in correct:
+                continue
+            waiting.append(
+                WaitingQuestion(
+                    resource_id=resource.id,
+                    title=resource.title,
+                    question=check.question,
+                )
+            )
+    return waiting
+
+
+def focus_waiting_question(outcome: StudyOutcome, question: str) -> StudyOutcome:
+    """Move the chosen question to the front of the open pack."""
+    chosen = [item for item in outcome.checks if item.question == question]
+    if not chosen:
+        return outcome
+    rest = tuple(item for item in outcome.checks if item.question != question)
+    return replace(outcome, checks=tuple(chosen) + rest)
+
+
+def saved_studies(
+    store: StudyStore,
+    *,
+    owner_id: str = LOCAL_LEARNER_ID,
+) -> list[Resource]:
+    """Return one learner's successful saved packs, newest first."""
+    return [
+        resource
+        for resource in store.list_resources(owner_id=owner_id)
+        if resource.status == STATUS_OK
+    ]
 
 
 def matching_studies(
@@ -651,9 +713,16 @@ def reply_day(created_at: str) -> str:
     return f"Reply day: {_MONTHS[local.month - 1]} {local.day}, {local.year}."
 
 
-def open_saved(store: StudyStore, resource_id: int) -> StudyOutcome:
+def open_saved(
+    store: StudyStore,
+    resource_id: int,
+    *,
+    owner_id: str = LOCAL_LEARNER_ID,
+) -> StudyOutcome:
     """Load one saved pack. This does not fetch the page or call the model."""
     resource = store.get_resource(resource_id)
+    if resource.owner_id != owner_id:
+        return StudyOutcome(ok=False, message="This study belongs to another learner.")
     if resource.status != STATUS_OK:
         return StudyOutcome(
             ok=False,
