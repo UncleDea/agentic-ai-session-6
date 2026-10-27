@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Build 86 — End-to-end check</title>
+  <style>
+    body { margin: 0; background: #f6f3ec; color: #1c1917; font-family: "Segoe UI", sans-serif; }
+    main { width: 920px; padding: 28px; }
+    h1 { font-size: 30px; margin: 0 0 6px; }
+    .lead { margin: 0 0 16px; color: #57534e; }
+    .box { background: #fffdf8; border: 2px solid #1c1917; border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+    .filled { background: #e7f0fb; }
+    h2 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 0; font-size: 15px; }
+    code { font-family: Consolas, monospace; font-size: 14px; }
+    .down { text-align: center; font-size: 22px; margin-top: 8px; }
+    .kicker { display: block; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: #57534e; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Build 86 — End-to-end check</h1>
+    <p class="lead">The regular check stays offline. A real page waits for a flag.</p>
+
+    <div class="box filled">
+      <span class="kicker">Plain command</span>
+      <h2>Fake page, then the tests</h2>
+      <p><code>.venv\Scripts\python.exe scripts\check_app.py</code></p>
+    </div>
+    <div class="down">↓</div>
+    <div class="box">
+      <span class="kicker">Only with --live</span>
+      <h2>One public page, one real pack</h2>
+      <p>That call spends about one cent. The saved studies stay.</p>
+    </div>
+  </main>
+</body>
+</html>

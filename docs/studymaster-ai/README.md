@@ -2,6 +2,8 @@
 
 StudyMaster turns one public page into a study pack. This guide opens the page and studies one article from the list.
 
+The full first-visit procedure is [SOP.md](SOP.md).
+
 ## Open the page
 
 1. Open PowerShell.
@@ -53,6 +55,20 @@ To study copied words, paste them into **Article text**.
 A line that starts with `https://www.linkedin.com` is only a reference. The Learn address in **Page link** is the page that gets read.
 
 **Study this page**, **Rewrite**, and **Check my answer** are the paid buttons. One new study pack is about one cent.
+
+## Check the app
+
+From the project folder, this command walks the study path with a fake page, then runs the tests. It does not spend the API key.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_app.py
+```
+
+This command does the same checks first. After they pass, it reads one public Microsoft Learn page and writes one real pack in a temporary database. That costs about one cent. The studies already on the page stay as they are.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_app.py --live
+```
 
 ## Stop the page
 
