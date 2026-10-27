@@ -92,7 +92,28 @@ def display_blocks(outcome: StudyOutcome) -> list[tuple[str, str]]:
         if section.status != STATUS_OK:
             blocks.append(("error", section.error_message))
         elif section.markdown:
-            blocks.append((section.kind, section.markdown))
+            blocks.extend(_section_blocks(section))
+    return blocks
+
+
+def _section_blocks(section: AgentSection) -> list[tuple[str, str]]:
+    """Return one section, with the picture placed under a saved outline."""
+    if section.kind != "study":
+        return [(section.kind, section.markdown)]
+    outline = _outline_text(section.markdown)
+    picture = outline_picture_markdown(outline)
+    heading = section.markdown.find("## Outline")
+    if not outline or not picture or heading < 0:
+        return [(section.kind, section.markdown)]
+    start = section.markdown.find(outline, heading)
+    if start < 0:
+        return [(section.kind, section.markdown)]
+    end = start + len(outline)
+    head = section.markdown[:end].rstrip()
+    tail = section.markdown[end:].lstrip("\n")
+    blocks = [("study", head), ("picture", picture)]
+    if tail.strip():
+        blocks.append(("study", tail))
     return blocks
 
 
